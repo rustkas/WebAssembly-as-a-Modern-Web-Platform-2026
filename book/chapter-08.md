@@ -289,14 +289,15 @@ process_data at 0x1234
 
 WABT поддерживает множество экспериментальных и стандартизированных расширений WASM через флаги :
 
-| Расширение | Флаг | Статус по умолчанию |
-|------------|------|---------------------|
-| Exception Handling | `--enable-exceptions` | Включено |
-| Threads | `--enable-threads` | Отключено |
-| SIMD | `--disable-simd` | Включено |
-| Memory64 | `--enable-memory64` | Отключено |
-| Multi-Memory | `--enable-multi-memory` | Отключено |
-| Function References | `--enable-function-references` | Отключено |
+ | Расширение | Флаг | Статус по умолчанию |
+ |------------|------|---------------------|
+ | Exception Handling | `--enable-exceptions` | Отключено (экспериментальный статус) |
+ | Threads | `--enable-threads` | Отключено |
+ | SIMD | `--disable-simd` | Включено |
+ | Memory64 | `--enable-memory64` | Отключено |
+ | Multi-Memory | `--enable-multi-memory` | Отключено |
+ | Function References | `--enable-function-references` | Отключено |
+ | Garbage Collection | `--enable-gc` | Отключено |
 
 Эти флаги управляют тем, какие возможности спецификации распознаются при парсинге и компиляции WASM-модулей.
 
