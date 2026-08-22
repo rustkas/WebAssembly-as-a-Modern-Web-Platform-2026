@@ -102,36 +102,31 @@ WebAssembly.compileStreaming(fetch("module.wasm"))
 
 ### Кэширование скомпилированных модулей
 
-В production-сценариях критически важно кэшировать результат компиляции. В Firefox и других браузерах развивается подход **кэширования скомпилированного машинного кода** для WebAssembly — при повторном запросе того же URL используется предварительно скомпилированный код, что исключает время компиляции при повторных загрузках .
+В production-сценариях критически важно избегать повторной компиляции. Chrome/V8 и Firefox реализуют это на уровне движка: если WASM-модуль загружается через `instantiateStreaming`/`compileStreaming` из `Response`, привязанного к конкретному URL, движок связывает скомпилированный машинный код с этим URL во внутреннем кеше (v8 использует "alt-data" поверх обычного HTTP-кеша ресурсов) — при повторном запросе того же URL с тем же содержимым компиляция пропускается полностью .
 
-Стандартный подход в 2026 году — использование **Cache API** для хранения `WebAssembly.Module`:
+ Важный нюанс: это кеширование машинного кода работает именно через `Response`-объект, полученный из реального сетевого запроса (или из Cache API) — а не через ручную компиляцию из `ArrayBuffer`. Если вы вручную извлекаете байты и вызываете `WebAssembly.compile(bytes)`, вы каждый раз запускаете компиляцию заново, даже если сами байты были взяты из кеша — Cache API кеширует только сетевую передачу, а не результат компиляции. Правильный паттерн — передавать закешированный `Response` напрямую в `instantiateStreaming`, позволяя внутреннему кешу движка (а не вашему коду) решать, нужна ли перекомпиляция:
 
-```javascript
-// При загрузке — сохраняем модуль в кэш
-async function loadAndCacheModule(url, imports) {
-  const cache = await caches.open('wasm-cache-v1');
-  const cached = await cache.match(url);
-  
-  if (cached) {
-    const module = await cached.arrayBuffer()
-      .then(bytes => WebAssembly.compile(bytes));
-    return new WebAssembly.Instance(module, imports);
-  }
-  
-  // Загрузка и кэширование
-  const response = await fetch(url);
-  const bytes = await response.arrayBuffer();
-  const module = await WebAssembly.compile(bytes);
-  
-  // Сохраняем в кэш только байт-код (из-за ограничений Cache API)
-  const cacheResponse = new Response(bytes, {
-    headers: { 'Content-Type': 'application/wasm' }
-  });
-  await cache.put(url, cacheResponse);
-  
-  return new WebAssembly.Instance(module, imports);
-}
-```
+ ```javascript
+ async function loadAndCacheModule(url, imports) {
+   const cache = await caches.open('wasm-cache-v1');
+   let response = await cache.match(url);
+
+   if (!response) {
+     response = await fetch(url);
+     // Кешируем сам Response, а не байты отдельно —
+     // именно это даёт движку "зацепку" за URL для кеша машинного кода
+     await cache.put(url, response.clone());
+   }
+
+   // Передаём Response напрямую в instantiateStreaming.
+   // Если движок уже видел этот URL/содержимое раньше — компиляция пропускается.
+   const { instance } = await WebAssembly.instantiateStreaming(response, imports);
+   return instance;
+ }
+ ```
+
+ Версионируйте ключи кеша (например, включайте хеш содержимого в URL или в имя кеша) — при деплое новой версии модуля со старым URL пользователи будут получать устаревший код с закешированным машинным кодом.
+
 
 Альтернативно, можно использовать `WebAssembly.Module` в качестве структуры данных для передачи между воркерами через `postMessage()` .
 
